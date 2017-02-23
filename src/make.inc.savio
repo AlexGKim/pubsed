@@ -5,8 +5,8 @@ GSL_INC   = /global/software/centos-5.x86_64/modules/gsl/1.9-intel/gsl-1.9/inclu
 GSL_LIB   = /global/software/centos-5.x86_64/modules/gsl/1.9-intel/gsl-1.9/lib
 
 # location of lua
-LUA_INC   = /global/home/users/kasen/local/include
-LUA_LIB   = /global/home/users/kasen/local/lib
+LUA_INC   = /global/scratch/dagoldst/sedona6/lua-5.3.3/install/include
+LUA_LIB   = /global/scratch/dagoldst/sedona6/lua-5.3.3/install/lib
 
 # location of hdf5
 HDF_INC=/usr/local/include

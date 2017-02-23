@@ -90,9 +90,15 @@ void transport::init(ParameterReader* par, grid_general *g)
   std::vector<double>sng = params_->getVector<double>("spectrum_nu_grid");
   int nmu  = params_->getScalar<int>("spectrum_n_mu");
   int nphi = params_->getScalar<int>("spectrum_n_phi");
-  optical_spectrum.init(stg,sng,nmu,nphi);
+  int nv   = params_->getScalar<int>("spectrum_n_v");
+  double v_max = params_->getScalar<double>("spectrum_v_max");
+
+  std::cout << "initializing optical spectrum"; << std::endl;
+  optical_spectrum.init(stg,sng,nmu,nphi,v_max,nv);
+  std::cout << "optical spectrum initialized." << std::endl;
+  
   std::vector<double>gng = params_->getVector<double>("gamma_nu_grid");  
-  gamma_spectrum.init(stg,sng,nmu,nphi);
+  gamma_spectrum.init(stg,sng,nmu,nphi,v_max,nv);
   
   // initialize nlte_gas class
   std::string atomdata = params_->getScalar<string>("data_atomic_file");  

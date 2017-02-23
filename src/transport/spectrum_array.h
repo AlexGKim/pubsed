@@ -21,6 +21,7 @@ private:
   locate_array wave_grid;
   locate_array mu_grid;
   locate_array phi_grid;
+  locate_array v_grid;
 
   // counting arrays
   std::vector<double> flux;
@@ -28,8 +29,8 @@ private:
 
   // Indexing
   int n_elements;
-  int a1, a2, a3;
-  int index(int,int,int,int);
+  int a1, a2, a3, a4;
+  int index(int,int,int,int,int);
     
 public:
 
@@ -37,11 +38,11 @@ public:
   spectrum_array();
   
   // Initialize
-  void init(std::vector<double>,std::vector<double>,int,int);
+  void init(std::vector<double>,std::vector<double>,int,int,double,int);
   void set_name(std::string);
 
   // Count a packets
-  void count(double t, double w, double E, double *D);
+  void count(double t, double w, double E, double *D, double vp);
 
   //  void normalize();
   void rescale(double);

@@ -30,7 +30,7 @@ void spectrum_array::set_name(std::string n)
 // Initialization and Allocation
 //--------------------------------------------------------------
 void spectrum_array::init(std::vector<double> t, std::vector<double> w,
-		    int n_mu, int n_phi)
+			  int n_mu, int n_phi, double v_max, int nv)
 {
   // assign time grid
   double t_start = t[0];
@@ -64,9 +64,13 @@ void spectrum_array::init(std::vector<double> t, std::vector<double> w,
   // asign phi grid
   this->phi_grid.init(0,2*pc::pi,n_phi);
 
+  // assign v grid
+  this->v_grid.init(0,v_max,nv);
+
   // index parameters
-  this->n_elements  = n_times*n_wave*n_mu*n_phi;
-  this->a3 = n_phi;
+  this->n_elements  = n_times*n_wave*n_mu*n_phi*nv;
+  this->a4 = nv;
+  this->a3 = n_phi*a4;
   this->a2 = n_mu*a3;
   this->a1 = n_wave*a2;
 
@@ -97,16 +101,16 @@ void spectrum_array::wipe()
 // handles the indexing: should be called in this order
 //    time, wavelength, mu, phi
 //--------------------------------------------------------------
-int spectrum_array::index(int t, int l, int m, int p)
+int spectrum_array::index(int t, int l, int m, int p, int v)
 {
-  return t*a1 + l*a2 + m*a3 + p;
+  return t*a1 + l*a2 + m*a3 + p*a4 + v;
 }
 
 
 //--------------------------------------------------------------
 // count a particle
 ////--------------------------------------------------------------
-void spectrum_array::count(double t, double w, double E, double *D)
+void spectrum_array::count(double t, double w, double E, double *D, double vp)
 {
   double mu  = D[2];
   double phi = atan2(D[1],D[0]);
@@ -116,19 +120,20 @@ void spectrum_array::count(double t, double w, double E, double *D)
   int l_bin = wave_grid.locate(w);
   int m_bin = mu_grid.locate(mu);
   int p_bin = phi_grid.locate(phi);
+  int v_bin = v_grid.locate(vp);
 
   // keep all photons, even if off wavelength grid
   if (l_bin < 0) l_bin = 0;
   if (l_bin >= wave_grid.size()) l_bin = 0;
 
   // if off the grids, just return without counting
-  if ((t_bin < 0)||(l_bin < 0)||(m_bin < 0)||(p_bin < 0)) return;
+  if ((t_bin < 0)||(l_bin < 0)||(m_bin < 0)||(p_bin < 0)||(v_bin < 0)) return;
   if (t_bin >= time_grid.size()) return;
   if (m_bin >= mu_grid.size())   return;
   if (p_bin >= phi_grid.size())  return;
   
   // add to counters
-  int ind      = index(t_bin,l_bin,m_bin,p_bin);
+  int ind      = index(t_bin,l_bin,m_bin,p_bin,v_bin);
 
   flux[ind]  += E;
   click[ind] += 1;
@@ -151,29 +156,33 @@ void spectrum_array::print()
   int n_wave   = this->wave_grid.size();
   int n_mu     = this->mu_grid.size();
   int n_phi    = this->phi_grid.size();
+  int n_v      = this->v_grid.size();
 
-  fprintf(out,"# %d %d %d %d\n",n_times,n_wave,n_mu,n_phi);
+  fprintf(out,"# %d %d %d %d %d\n",n_times,n_wave,n_mu,n_phi,n_v);
 
-  for (int k=0;k<n_mu;k++)
-    for (int m=0;m<n_phi;m++)
-      for (int i=0;i<n_times;i++)
-	     for (int j=0;j<n_wave;j++) 
-        {
-	       int id = index(i,j,k,m);
-	       if (n_times > 1)  fprintf(out,"%12.4e ",time_grid.center(i));;
-	       if (n_wave > 1)   fprintf(out,"%12.4e ",wave_grid.center(j));
-	       if (n_mu > 1)     fprintf(out,"%12.4f ",mu_grid.center(k));
-	       if (n_phi> 1)     fprintf(out,"%12.4f ",phi_grid.center(m));
+  for (int l=0;l<n_v;l++)
+    for (int k=0;k<n_mu;k++)
+      for (int m=0;m<n_phi;m++)
+	for (int i=0;i<n_times;i++)
+	  for (int j=0;j<n_wave;j++) 
+	    {
+	      
+	      int id = index(i,j,k,m,l);
+	      if (n_times > 1)  fprintf(out,"%12.4e ",time_grid.center(i));;
+	      if (n_wave > 1)   fprintf(out,"%12.4e ",wave_grid.center(j));
+	      if (n_mu > 1)     fprintf(out,"%12.4f ",mu_grid.center(k));
+	      if (n_phi> 1)     fprintf(out,"%12.4f ",phi_grid.center(m));
+	      if (n_v > 1)      fprintf(out,"%12.4f ",v_grid.center(l));
+	      
+	      double norm = n_mu*n_phi*v_grid.center(l)*v_grid.delta(l)*2*pc::pi*pow(time_grid.center(i),2);
+	      if (n_wave > 1)  norm *= wave_grid.delta(j);
+	      if (n_times > 1) norm *= time_grid.delta(i);
+	      
+	      // normalize it
+	      flux[id] = flux[id]/norm;
 
-    	   double norm = n_mu*n_phi;
-	       if (n_wave > 1)  norm *= wave_grid.delta(j);
-	       if (n_times > 1) norm *= time_grid.delta(i);
-	  
-         // normalize it
-         flux[id] = flux[id]/norm;
-
-    	   fprintf(out,"%12.5e %10d\n", flux[id],click[id]);
-    	 }
+	      fprintf(out,"%12.5e %10d\n", flux[id],click[id]);
+	    }
   fclose(out);
 
   // write hdf5 spectrum file

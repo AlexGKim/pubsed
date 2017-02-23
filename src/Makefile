@@ -3,7 +3,7 @@
 #######
 
 # put your make.inc here
-MAKE_INC = make.inc.tagore
+MAKE_INC = make.inc.savio
 
 # executable directory where compiliation takes place
 EXECDIR = ./EXEC
