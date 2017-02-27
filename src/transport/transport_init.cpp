@@ -97,6 +97,9 @@ void transport::init(ParameterReader* par, grid_general *g)
   optical_spectrum.init(stg,sng,nmu,nphi,v_max,nv);
   std::cout << "optical spectrum initialized." << std::endl;
   
+  // print size of optical spectrum (debugging)
+  std::cout << "size of optical spectrum is: " << sizeof(optical_spectrum) << "bytes" << std::endl;
+
   std::vector<double>gng = params_->getVector<double>("gamma_nu_grid");  
   gamma_spectrum.init(stg,sng,nmu,nphi,v_max,nv);
   
