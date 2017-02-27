@@ -93,7 +93,7 @@ void transport::init(ParameterReader* par, grid_general *g)
   int nv   = params_->getScalar<int>("spectrum_n_v");
   double v_max = params_->getScalar<double>("spectrum_v_max");
 
-  std::cout << "initializing optical spectrum"; << std::endl;
+  std::cout << "initializing optical spectrum" << std::endl;
   optical_spectrum.init(stg,sng,nmu,nphi,v_max,nv);
   std::cout << "optical spectrum initialized." << std::endl;
   
