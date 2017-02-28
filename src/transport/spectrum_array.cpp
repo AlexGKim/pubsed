@@ -108,7 +108,7 @@ void spectrum_array::wipe()
 
 //--------------------------------------------------------------
 // handles the indexing: should be called in this order
-//    time, wavelength, mu, phi
+//    time, wavelength, mu, phi, v
 //--------------------------------------------------------------
 int spectrum_array::index(int t, int l, int m, int p, int v)
 {
@@ -215,12 +215,19 @@ void spectrum_array::print()
   H5LTmake_dataset(file_id,"time",RANK,dims_t,H5T_NATIVE_FLOAT,tmp_array);
   delete[] tmp_array;
 
+  // write v grid
+  tmp_array = new float[n_v];
+  hsize_t dims_v[RANK] = {n_v};
+  for (int j=0;j<n_v;j++) tmp_array[j] = v_grid.center(j);
+  H5LTmake_dataset(file_id,"v",RANK,dims_v,H5T_NATIVE_FLOAT,tmp_array);
+  delete[] tmp_array;
+
   // write fluxes array
-  const int RANKF = 2;
+  const int RANKF = 5;
   double *darray = new double[n_elements];
   for (int i=0;i<n_elements;i++) darray[i] = flux[i];
-  hsize_t  dims_flux[RANKF]={n_t,n_nu};
-  H5LTmake_dataset(file_id,"Lnu",RANKF,dims_flux,H5T_NATIVE_DOUBLE,darray);
+  hsize_t  dims_flux[RANKF]={n_t,n_nu,n_mu,n_phi,n_v};
+  H5LTmake_dataset(file_id,"Fnu",RANKF,dims_flux,H5T_NATIVE_DOUBLE,darray);
   delete[] darray;
 
   H5Fclose (file_id);

@@ -22,7 +22,7 @@ transport_nu_grid   = {nu1,nu2,0.0003,1}
 
 -- grid to calculate output spectrum
 nu1_spec = nu1*1.1
-spectrum_nu_grid   = {nu1_spec,nu2,0.001,1}
+spectrum_nu_grid   = {nu1_spec,nu2,0.01,1}
 spectrum_time_grid = {-5*days,100*days,0.25*days}
 spectrum_v_max = 4e9
 spectrum_n_v = 100
