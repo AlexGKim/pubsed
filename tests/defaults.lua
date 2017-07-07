@@ -45,7 +45,7 @@ tstep_max_delta  = 0.1
 
 -- output parameters
 output_write_levels = 0
-output_write_grid   = 1
+output_write_grid   = 0
 output_write_times  = 0  -- how often to write out grid data
 
 -- limiting values for calculation
