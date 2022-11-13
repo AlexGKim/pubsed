@@ -2,6 +2,7 @@
 #define _PARTICLE_H
 
 #include <math.h>
+#include <stdio.h>
 
 // particle properties
 enum PType         {photon, gammaray, positron, neutrino};
@@ -17,6 +18,7 @@ class particle
   
   double    x[3];         // x,y,z position
   double    D[3];         // direction vector, Dx,Dy,Dz
+  double    x_interact[3];    // position of last scatter
   int        ind;         // index of the zone in grid where we are
   double       t;         // current time
   double       e;         // total energy in ergs of packet
@@ -26,8 +28,13 @@ class particle
   double   dshift;        // doppler shift
   double   dvds;          // directional velocity derivative 
 
+  ParticleFate fate;
+
   double r() 
   { return sqrt(x[0]*x[0] + x[1]*x[1] + x[2]*x[2]); }
+
+  double r_interact() 
+  { return sqrt(x_interact[0]*x_interact[0] + x_interact[1]*x_interact[1] + x_interact[2]*x_interact[2]); }
 
    double x_dot_d() 
   {return x[0]*D[0] + x[1]*D[1] + x[2]*D[2]; }

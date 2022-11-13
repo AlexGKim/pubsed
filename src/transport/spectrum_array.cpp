@@ -1,4 +1,3 @@
-#include <mpi.h>
 #include <stdio.h>
 #include <iostream>
 #include <math.h>
@@ -6,9 +5,14 @@
 #include <vector>
 #include "hdf5.h"
 #include "hdf5_hl.h"
+#include "sedona.h"
 
 #include "spectrum_array.h"
 #include "physical_constants.h"
+
+#ifdef MPI_PARALLEL
+#include <mpi.h>
+#endif
 
 using std::vector;
 namespace pc = physical_constants;
@@ -41,16 +45,16 @@ void spectrum_array::init(std::vector<double> t, std::vector<double> w,
 
   // assign frequency grid
   if ((w.size() != 4)&&(w.size() != 3)) {
-    std::cout << "# improperly defined spectrum_nu_grid; need {nu_1, nu_2, dnu, (log?)}; exiting\n";
+    std::cerr << "# improperly defined spectrum_nu_grid; need {nu_1, nu_2, dnu, (log?)}; exiting" << std::endl;
     exit(1); }
 
   double w_start = w[0];
   double w_stop  = w[1];
   double w_del   = w[2];
 
-  // initialize the frequency grid  
+  // initialize the frequency grid
   if (w.size() == 3)
-   this->wave_grid.init(w_start,w_stop,w_del);
+    this->wave_grid.init(w_start,w_stop,w_del);
   if (w.size() == 4)
   {
     if (w[3] == 1) wave_grid.log_init(w_start,w_stop,w_del);
@@ -87,8 +91,110 @@ void spectrum_array::init(std::vector<double> t, std::vector<double> w,
   std::cout << "size of click is " << sizeof(click) << std::endl;
   this->flux.resize(n_elements);
 
-  // clear 
+  // clear
   wipe();
+}
+
+void spectrum_array::writeCheckpointSpectrum(std::string fname, std::string spectrum_name) {
+  MPI_average();
+  MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &nproc);
+  if (my_rank == 0) {
+    createGroup(fname, spectrum_name);
+    time_grid.writeCheckpoint(fname, spectrum_name, "time_grid");
+    wave_grid.writeCheckpoint(fname, spectrum_name, "wave_grid");
+    mu_grid.writeCheckpoint(fname, spectrum_name, "mu_grid");
+    phi_grid.writeCheckpoint(fname, spectrum_name, "phi_grid");
+
+    writeVector(fname, spectrum_name, "flux", flux, H5T_NATIVE_DOUBLE);
+    writeVector(fname, spectrum_name, "click", click, H5T_NATIVE_DOUBLE);
+
+    hsize_t single_val = 1;
+    hsize_t name_len = 1000;
+    createDataset(fname, spectrum_name, "n_elements", 1, &single_val, H5T_NATIVE_INT);
+    writeSimple(fname, spectrum_name, "n_elements", &n_elements, H5T_NATIVE_INT);
+
+    createDataset(fname, spectrum_name, "name", 1, &name_len, H5T_C_S1);
+    writeSimple(fname, spectrum_name, "name", name, H5T_C_S1);
+    createDataset(fname, spectrum_name, "a1", 1, &single_val, H5T_NATIVE_INT);
+    writeSimple(fname, spectrum_name, "a1", &a1, H5T_NATIVE_INT);
+    createDataset(fname, spectrum_name, "a2", 1, &single_val, H5T_NATIVE_INT);
+    writeSimple(fname, spectrum_name, "a2", &a2, H5T_NATIVE_INT);
+    createDataset(fname, spectrum_name, "a3", 1, &single_val, H5T_NATIVE_INT);
+    writeSimple(fname, spectrum_name, "a3", &a3, H5T_NATIVE_INT);
+  }
+  MPI_Barrier(MPI_COMM_WORLD);
+}
+
+void spectrum_array::readCheckpointSpectrum(std::string fname, std::string n) {
+  MPI_Comm_rank(MPI_COMM_WORLD, &my_rank);
+  MPI_Comm_size(MPI_COMM_WORLD, &nproc);
+  for (int rank = 0; rank < nproc; rank++) {
+    if (rank == my_rank) {
+      time_grid.readCheckpoint(fname, n, "time_grid");
+      wave_grid.readCheckpoint(fname, n, "wave_grid");
+      mu_grid.readCheckpoint(fname, n, "mu_grid");
+      phi_grid.readCheckpoint(fname, n, "phi_grid");
+
+      readVector(fname, n, "flux", flux, H5T_NATIVE_DOUBLE);
+      readVector(fname, n, "click", click, H5T_NATIVE_DOUBLE);
+      readSimple(fname, n, "name", name, H5T_C_S1);
+      readSimple(fname, n, "n_elements", &n_elements, H5T_NATIVE_INT);
+      readSimple(fname, n, "a1", &a1, H5T_NATIVE_INT);
+      readSimple(fname, n, "a2", &a2, H5T_NATIVE_INT);
+      readSimple(fname, n, "a3", &a3, H5T_NATIVE_INT);
+    }
+    MPI_Barrier(MPI_COMM_WORLD);
+  }
+}
+
+bool spectrum_array::is_equal(spectrum_array sa, bool complain) {
+  bool equal = true;
+  if (not time_grid.is_equal(sa.time_grid, complain)) {
+    if (complain) std::cerr << "spectrum array time grids are different" << std::endl;
+    equal = false;
+  }
+  if (not wave_grid.is_equal(sa.wave_grid, complain)) {
+    if (complain) std::cerr << "spectrum array wave grids are different" << std::endl;
+    equal = false;
+  }
+  if (not mu_grid.is_equal(sa.mu_grid, complain)) {
+    if (complain) std::cerr << "spectrum array mu grids are different" << std::endl;
+    equal = false;
+  }
+  if (not phi_grid.is_equal(sa.phi_grid, complain)) {
+    if (complain) std::cerr << "spectrum array phi grids are different" << std::endl;
+    equal = false;
+  }
+  if (flux != sa.flux) {
+    if (complain) std::cerr << "flux vectors are different" << std::endl;
+    equal = false;
+  }
+  if (click != sa.click) {
+    if (complain) std::cerr << "click vectors are different" << std::endl;
+    equal = false;
+  }
+  if (n_elements != sa.n_elements) {
+    if (complain) std::cerr << "n_elements are different" << std::endl;
+    equal = false;
+  }
+  if (a1 != sa.a1) {
+    if (complain) std::cerr << "a1 are different" << std::endl;
+    equal = false;
+  }
+  if (a2 != sa.a2) {
+    if (complain) std::cerr << "a2 are different" << std::endl;
+    equal = false;
+  }
+  if (a3 != sa.a3) {
+    if (complain) std::cerr << "a3 are different" << std::endl;
+    equal = false;
+  }
+  if (std::string(name) != std::string(sa.name)) {
+    if (complain) std::cerr << "names are different" << std::endl;
+    equal = false;
+  }
+  return equal;
 }
 
 
@@ -97,7 +203,7 @@ void spectrum_array::init(std::vector<double> t, std::vector<double> w,
 //--------------------------------------------------------------
 void spectrum_array::wipe()
 {
-  for (int i=0;i<click.size();i++) 
+  for (size_t i=0;i<click.size();i++)
   {
     flux[i]   = 0;
     click[i]  = 0;
@@ -123,7 +229,10 @@ void spectrum_array::count(double t, double w, double E, double *D, double vp)
 {
   double mu  = D[2];
   double phi = atan2(D[1],D[0]);
-  
+  if (phi < 0){
+    phi += 2.*pc::pi;
+  }
+
   // locate bin number in all dimensions
   int t_bin = time_grid.locate(t);
   int l_bin = wave_grid.locate(w);
@@ -140,11 +249,13 @@ void spectrum_array::count(double t, double w, double E, double *D, double vp)
   if (t_bin >= time_grid.size()) return;
   if (m_bin >= mu_grid.size())   return;
   if (p_bin >= phi_grid.size())  return;
-  
+
   // add to counters
   int ind      = index(t_bin,l_bin,m_bin,p_bin,v_bin);
 
+#pragma omp atomic
   flux[ind]  += E;
+#pragma omp atomic
   click[ind] += 1;
 }
 
@@ -153,13 +264,12 @@ void spectrum_array::count(double t, double w, double E, double *D, double vp)
 //--------------------------------------------------------------
 // print out
 //--------------------------------------------------------------
-void spectrum_array::print()
+void spectrum_array::print(int suppress_txt = 0)
 {
-   // get file name
+  // get file name
   char specfile[1000];
-  sprintf(specfile,"%s.dat",name);
-
-  FILE *out = fopen(specfile,"w");
+  int mpi_procs;
+  MPI_Comm_size( MPI_COMM_WORLD, &mpi_procs );
 
   int n_times  = this->time_grid.size();
   int n_wave   = this->wave_grid.size();
@@ -167,32 +277,57 @@ void spectrum_array::print()
   int n_phi    = this->phi_grid.size();
   int n_v      = this->v_grid.size();
 
-  fprintf(out,"# %d %d %d %d %d\n",n_times,n_wave,n_mu,n_phi,n_v);
+  double *darray = new double[n_elements];
+  double *click_buffer = new double[n_elements];
 
-  for (int l=0;l<n_v;l++)
+  // unitize
+  for (int k=0;k<n_mu;k++)
+    for (int m=0;m<n_phi;m++)
+      for (int i=0;i<n_times;i++)
+        for (int j=0;j<n_wave;j++)
+        {
+          int id = index(i,j,k,m);
+
+          double norm = 1.0/(n_mu*n_phi);
+          if (n_wave > 1)  norm *= wave_grid.delta(j);
+          if (n_times > 1) norm *= time_grid.delta(i);
+
+          // normalize it
+          darray[id] = flux[id]/norm;
+          click_buffer[id] = click[id] * mpi_procs;
+
+        }
+
+  if (!suppress_txt) {
+    sprintf(specfile,"%s.dat",name);
+
+    FILE *out = fopen(specfile,"w");
+
+    // fprintf(out,"# %d %d %d %d\n",n_times,n_wave,n_mu,n_phi);
+    fprintf(out,"# %d %d %d %d %d\n",n_times,n_wave,n_mu,n_phi,n_v);
+
+    // printout to txt
+   for (int l=0;l<n_v;l++)
     for (int k=0;k<n_mu;k++)
       for (int m=0;m<n_phi;m++)
-	for (int i=0;i<n_times;i++)
-	  for (int j=0;j<n_wave;j++) 
-	    {
-	      
-	      int id = index(i,j,k,m,l);
-	      if (n_times > 1)  fprintf(out,"%12.4e ",time_grid.center(i));;
-	      if (n_wave > 1)   fprintf(out,"%12.4e ",wave_grid.center(j));
-	      if (n_mu > 1)     fprintf(out,"%12.4f ",mu_grid.center(k));
-	      if (n_phi> 1)     fprintf(out,"%12.4f ",phi_grid.center(m));
-	      if (n_v > 1)      fprintf(out,"%12.4f ",v_grid.center(l));
-	      
-	      double norm = n_mu*n_phi*v_grid.center(l)*v_grid.delta(l)*2*pc::pi*pow(time_grid.center(i),2);
-	      if (n_wave > 1)  norm *= wave_grid.delta(j);
-	      if (n_times > 1) norm *= time_grid.delta(i);
-	      
-	      // normalize it
-	      flux[id] = flux[id]/norm;
+        for (int i=0;i<n_times;i++)
+          for (int j=0;j<n_wave;j++)
+          {
+            // int id = index(i,j,k,m);
+            int id = index(i,j,k,m,l);
+            if (n_times > 1)  fprintf(out,"%12.4e ",time_grid.center(i));;
+            if (n_wave > 1)   fprintf(out,"%12.4e ",wave_grid.center(j));
+            if (n_mu > 1)     fprintf(out,"%12.4f ",mu_grid.center(k));
+            if (n_phi> 1)     fprintf(out,"%12.4f ",phi_grid.center(m));
+            if (n_v > 1)      fprintf(out,"%12.4f ",v_grid.center(l));
+            double norm = n_mu*n_phi*v_grid.center(l)*v_grid.delta(l)*2*pc::pi*pow(time_grid.center(i),2);
+          if (n_wave > 1)  norm *= wave_grid.delta(j);
+          if (n_times > 1) norm *= time_grid.delta(i);
 
-	      fprintf(out,"%12.5e %10d\n", flux[id],click[id]);
-	    }
-  fclose(out);
+            fprintf(out,"%12.5e %12.5e\n", darray[id],click_buffer[id]);
+          }
+    fclose(out);
+  }
 
   // write hdf5 spectrum file
   sprintf(specfile,"%s.h5",name);
@@ -202,33 +337,109 @@ void spectrum_array::print()
   // write nu grid
   int n_nu = wave_grid.size();
   float* tmp_array = new float[n_nu];
-  hsize_t  dims_nu[RANK]={n_nu};
+  hsize_t  dims_nu[RANK]={(hsize_t)n_nu};
   for (int j=0;j<n_nu;j++) tmp_array[j] = wave_grid.center(j);
   H5LTmake_dataset(file_id,"nu",RANK,dims_nu,H5T_NATIVE_FLOAT,tmp_array);
+  delete[] tmp_array;
+
+  tmp_array = new float[n_nu+1];
+  hsize_t  dims_nu_edges[RANK]={(hsize_t)(n_nu+1)};
+  tmp_array[0] = wave_grid.minval();
+  for (int j=0;j<n_nu;j++) tmp_array[j+1] = wave_grid[j];
+  H5LTmake_dataset(file_id,"nu_edges",RANK,dims_nu_edges,H5T_NATIVE_FLOAT,tmp_array);
+  delete[] tmp_array;
+
+  // write mu grid
+  tmp_array = new float[n_mu];
+  hsize_t  dims_mu[RANK]={(hsize_t)n_mu};
+  for (int j=0;j<n_mu;j++) tmp_array[j] = mu_grid.center(j);
+  H5LTmake_dataset(file_id,"mu",RANK,dims_mu,H5T_NATIVE_FLOAT,tmp_array);
+  delete[] tmp_array;
+
+  tmp_array = new float[n_mu+1];
+  hsize_t  dims_mu_edges[RANK]={(hsize_t)(n_mu+1)};
+  tmp_array[0] = mu_grid.minval();
+  for (int j=0;j<n_mu;j++) tmp_array[j+1] = mu_grid[j];
+  H5LTmake_dataset(file_id,"mu_edges",RANK,dims_mu_edges,H5T_NATIVE_FLOAT,tmp_array);
+  delete[] tmp_array;
+
+  // write phi grid
+  tmp_array = new float[n_phi];
+  hsize_t  dims_phi[RANK]={(hsize_t)n_phi};
+  for (int j=0;j<n_phi;j++) tmp_array[j] = phi_grid.center(j);
+  H5LTmake_dataset(file_id,"phi",RANK,dims_phi,H5T_NATIVE_FLOAT,tmp_array);
+  delete[] tmp_array;
+
+  tmp_array = new float[n_phi+1];
+  hsize_t  dims_phi_edges[RANK]={(hsize_t)(n_phi+1)};
+  tmp_array[0] = phi_grid.minval();
+  for (int j=0;j<n_phi;j++) tmp_array[j+1] = phi_grid[j];
+  H5LTmake_dataset(file_id,"phi_edges",RANK,dims_phi_edges,H5T_NATIVE_FLOAT,tmp_array);
   delete[] tmp_array;
 
   // write time grid
   int n_t = time_grid.size();
   tmp_array = new float[n_t];
-  hsize_t dims_t[RANK]={n_t};
+  hsize_t dims_t[RANK]={(hsize_t)n_t};
   for (int j=0;j<n_t;j++) tmp_array[j] = time_grid.center(j);
   H5LTmake_dataset(file_id,"time",RANK,dims_t,H5T_NATIVE_FLOAT,tmp_array);
   delete[] tmp_array;
 
-  // write v grid
+  tmp_array = new float[n_t+1];
+  hsize_t dims_t_edges[RANK]={(hsize_t)(n_t+1)};
+  tmp_array[0] = time_grid.minval();
+  for (int j=0;j<n_t;j++) tmp_array[j+1] = time_grid[j];
+  H5LTmake_dataset(file_id,"time_edges",RANK,dims_t_edges,H5T_NATIVE_FLOAT,tmp_array);
+  delete[] tmp_array;
+
+    // write v grid
   tmp_array = new float[n_v];
   hsize_t dims_v[RANK] = {n_v};
   for (int j=0;j<n_v;j++) tmp_array[j] = v_grid.center(j);
   H5LTmake_dataset(file_id,"v",RANK,dims_v,H5T_NATIVE_FLOAT,tmp_array);
   delete[] tmp_array;
 
+
+
+  // write fluxes and counts arrays
+  if ( (n_mu == 1) && (n_phi == 1)  && (n_v == 1))
+  {
+    const int RANKF = 2;
+    hsize_t  dims_flux[RANKF]={(hsize_t)n_t,(hsize_t)n_nu};
+    H5LTmake_dataset(file_id,"Lnu",RANKF,dims_flux,H5T_NATIVE_DOUBLE,darray);
+    H5LTmake_dataset(file_id,"click",RANKF,dims_flux,H5T_NATIVE_DOUBLE,click_buffer);
+  }
+  else if (n_phi == 1)
+  {
+    const int RANKF = 3;
+    hsize_t  dims_flux[RANKF]={(hsize_t)n_t,(hsize_t)n_nu,(hsize_t)n_mu};
+    H5LTmake_dataset(file_id,"Lnu",RANKF,dims_flux,H5T_NATIVE_DOUBLE,darray);
+    H5LTmake_dataset(file_id,"click",RANKF,dims_flux,H5T_NATIVE_DOUBLE,click_buffer);
+  }
+  else if (n_mu == 1)
+  {
+    const int RANKF = 3;
+    hsize_t  dims_flux[RANKF]={(hsize_t)n_t,(hsize_t)n_nu,(hsize_t)n_phi};
+    H5LTmake_dataset(file_id,"Lnu",RANKF,dims_flux,H5T_NATIVE_DOUBLE,darray);
+    H5LTmake_dataset(file_id,"click",RANKF,dims_flux,H5T_NATIVE_DOUBLE,click_buffer);
+  }
+  else if(n_v ==1)
+  {
+    const int RANKF = 4;
+    hsize_t  dims_flux[RANKF]={(hsize_t)n_t,(hsize_t)n_nu,(hsize_t)n_mu,(hsize_t)n_phi};
+    H5LTmake_dataset(file_id,"Lnu",RANKF,dims_flux,H5T_NATIVE_DOUBLE,darray);
+    H5LTmake_dataset(file_id,"click",RANKF,dims_flux,H5T_NATIVE_DOUBLE,click_buffer);
+  }
+else{
   // write fluxes array
-  const int RANKF = 5;
-  double *darray = new double[n_elements];
-  for (int i=0;i<n_elements;i++) darray[i] = flux[i];
-  hsize_t  dims_flux[RANKF]={n_t,n_nu,n_mu,n_phi,n_v};
-  H5LTmake_dataset(file_id,"Fnu",RANKF,dims_flux,H5T_NATIVE_DOUBLE,darray);
+    const int RANKF = 5;
+    hsize_t  dims_flux[RANKF]={(hsize_t)n_t,(hsize_t)n_nu,(hsize_t)n_mu,(hsize_t)n_phi,(hsize_t)n_v};
+    H5LTmake_dataset(file_id,"Lnu",RANKF,dims_flux,H5T_NATIVE_DOUBLE,darray);
+    H5LTmake_dataset(file_id,"click",RANKF,dims_flux,H5T_NATIVE_DOUBLE,click_buffer);
+} 
+
   delete[] darray;
+  delete[] click_buffer;
 
   H5Fclose (file_id);
 
@@ -237,7 +448,7 @@ void spectrum_array::print()
 
 void  spectrum_array::rescale(double r)
 {
-  for (int i=0;i<flux.size();i++) flux[i] *= r;
+  for (size_t i=0;i<flux.size();i++) flux[i] *= r;
 }
 
 
@@ -248,6 +459,8 @@ void  spectrum_array::rescale(double r)
 // only process 0 gets the reduced spectrum to print
 void spectrum_array::MPI_average()
 {
+#ifdef MPI_PARALLEL
+
   int receiving_ID = 0;
   int mpi_procs, myID;
 
@@ -255,27 +468,31 @@ void spectrum_array::MPI_average()
   {
     vector<double> receive;
     receive.resize(n_elements);
-    MPI_Reduce(&flux.front(), &receive.front(), n_elements, MPI_DOUBLE, MPI_SUM, receiving_ID, MPI_COMM_WORLD);
+    for (int i=0;i<n_elements;++i) receive[i] = 0.0;
+
+    //    MPI_Reduce(&flux.front(), &receive.front(), n_elements, MPI_DOUBLE, MPI_SUM, receiving_ID, MPI_COMM_WORLD);
+    MPI_Allreduce(&flux.front(), &receive.front(), n_elements, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     flux.swap(receive);
   }
 
   // average clicks (receive goes out of scope after section)
   {
-    vector<int> receive;
+    vector<double> receive;
     receive.resize(n_elements);
-    MPI_Reduce(&click.front(), &receive.front(), n_elements, MPI_INT, MPI_SUM, receiving_ID, MPI_COMM_WORLD);
+    for (int i=0;i<n_elements;++i) receive[i] = 0.0;
+    MPI_Allreduce(&click.front(), &receive.front(), n_elements, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
     click.swap(receive);
   }
-  
+
   // only have the receiving ID do the division
   MPI_Comm_size( MPI_COMM_WORLD, &mpi_procs );
   MPI_Comm_rank( MPI_COMM_WORLD, &myID      );
-  if(myID == receiving_ID){
-    #pragma omp parallel for
-    for (int i=0;i<n_elements;i++)
-    {
-      flux[i]  /= mpi_procs;
-      click[i] /= mpi_procs;
-    }
+  //if(myID == receiving_ID){
+  //   #pragma omp parallel for
+  for (int i=0;i<n_elements;i++) {
+    flux[i]  /= mpi_procs;
+    click[i] /= mpi_procs;
   }
+
+#endif
 }

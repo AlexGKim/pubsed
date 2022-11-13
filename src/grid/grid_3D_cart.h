@@ -1,5 +1,5 @@
-#ifndef _GRID_1D_SPHERE_H
-#define _GRID_1D_SPHERE_H 1
+#ifndef _GRID_3D_CART_H
+#define _GRID_3D_CART_H 1
 
 #include <fstream>
 #include <vector>
@@ -15,33 +15,49 @@ class grid_3D_cart: public grid_general
 
 private:
 
-  // specifics to this geometry
- // specifics to this geometry
+  // Flags to remember how grid was read in
+  herr_t status_dr_;
+  herr_t status_rmin_;
+  herr_t status_xyz_;
 
-  int    nx, ny, nz; // number of zones in each dimension
-  double dx, dy, dz; // length of each zone in each dimension
-  double x0, y0, z0; // leftmost points
-  double vol;        // volume of each zone = dx*dy*dz
-  double min_ds;
-  int *ix,*iy,*iz;
-  int reflect_x, reflect_y, reflect_z;
+  int nx_, ny_, nz_; // number of zones in each dimension
 
+  // the right zone edge in each direction
+  // the lengths of these arrays are nx_, ny_, and nz_, respectively
+  // these arrays are indexed by the x-index, y-index, and z-index, respectively
+  locate_array x_out_, y_out_, z_out_;
+
+  // store precomputed zone widths in each direction. These arrays are indexed by the x-index, y-index, and z-index, respectively
+  std::vector<double> dx_, dy_, dz_;
+
+  // store precomputed zone volumes. These arrays are indexed by the index in the flattened 1D array of all zones
+  std::vector<double> vol_;
+
+  std::vector<int> index_x_; // map to x index from the index in the flattened 1D array of all zones
+  std::vector<int> index_y_; // map to y index from the index in the flattened 1D array of all zones
+  std::vector<int> index_z_; // map to z index from the index in the flattened 1D array of all zones
+
+  int get_index(int i, int j, int k)
+  {
+    int ind =  i*ny_*nz_ + j*nz_ + k;
+    return ind;
+  }
 
 public:
 
   virtual ~grid_3D_cart() {}
 
-  void read_model_file(Lua *lua);
-
-
   // required functions
+  void    read_model_file(ParameterReader*);
+  void    write_plotfile(int,double,int);
   int     get_zone(const double *) const;
   double  zone_volume(const int) const;
   double  zone_min_length(const int) const;
   void    sample_in_zone(int, std::vector<double>, double[3]);
-  void    velocity_vector(const int i, const double[3], double[3]);
-  void    write_out(int);
+  void    get_velocity(int i, double[3], double[3], double[3], double*);
   void    expand(double);
+  int     get_next_zone(const double *x, const double *D, int, double, double *dist) const;
+  void    coordinates(int i,double r[3]);
 
 };
 

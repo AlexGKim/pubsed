@@ -1,3 +1,4 @@
+src/makefiles
 EXEC/
 grid*h5
 ray*dat
@@ -6,3 +7,5 @@ spectrum*dat
 spectrum*h5
 *~
 *.pyc
+doc/sphinx_doc/_build/
+src/external/lua-5.2.1

@@ -15,12 +15,17 @@ public:
   real v[3];            // velocity vector (cm/s)
   real rho;             // density (g/cm^3)
   real cs;              // sound speed (cm/s)
+  real e_gas;           // gas pressure
   real p_gas;           // gas pressure
   real T_gas;           // gas temperature
+  real n_elec;          // number of free electrons
+  real bulk_grey_opacity;           // bulk component of the grey opacity (cm^2/g), which is the same in every zone
+  real zone_specific_grey_opacity;  // zone-specific component of the grey opacity (cm^2/g), which varies from zone to zone
+  real total_grey_opacity;          // total grey opacity (cm^2/g), which is the sum of the bulk component and the zone-specific component
 
   // composition of gas
   std::vector<real> X_gas;   // mass fractions of elements in zone
-  real mu;                   // mean atomic mass
+  real mu_I;                   // mean atomic/ionic mass (not including free electrons). Dimensionless; needs to be multiplied by amu (~ m_p) to get units of grams
 
   // radiation quantities
   real e_rad;      // radiation energy density  (ergs/cm^3) in lab frame
@@ -28,6 +33,7 @@ public:
   real fx_rad;     // radiation x-force in lab frame
   real fy_rad;     // radiation y-force in lab frame
   real fz_rad;     // radiation z-force in lab frame
+  real fr_rad;     // radiation radial force in lab frame
   real eps_imc;    // fleck factor effective absorption
   real L_thermal;  // thermal luminosity 
 

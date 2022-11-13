@@ -1,42 +1,58 @@
 #include <iostream>
 #include <fstream>
 #include <stdio.h>
-#include "nlte_gas.h"
+#include "GasState.h"
 #include "locate_array.h"
 #include "physical_constants.h"
 #include "ParameterReader.h"
+#include "sedona.h"
 
+#ifdef MPI_PARALLEL
 #include <mpi.h>
+#endif
 
 using namespace std;
 namespace pc = physical_constants;
 
 static locate_array nu_grid;
-static nlte_gas gas;
+static GasState gas;
 static ParameterReader params;
-static std::vector<double> abs_opacity, scat_opacity, tot_opacity, emissivity;
+static std::vector<OpacityType> abs_opacity, scat_opacity, tot_opacity, emissivity;
 
 // functions
-static double rosseland_mean(std::vector<double> opac);
-static double planck_mean(std::vector<double> opac);
+static double rosseland_mean(std::vector<OpacityType> opac);
+static double planck_mean(std::vector<OpacityType> opac);
 static void write_mesa_file(std::string);
 static void write_frequency_file(std::string, int);
+static void write_gas_state(std::string);
+static void write_mean_opacities(std::string);
+static int verbose;
+
 
 int main(int argc, char **argv)
 {
-  // initialize MPI 
+
+int my_rank,n_procs;
+#ifdef MPI_PARALLEL
   MPI_Init( &argc, &argv );
-  const int verbose = 1; 
+  MPI_Comm_rank( MPI_COMM_WORLD, &my_rank );
+  MPI_Comm_size( MPI_COMM_WORLD, &n_procs);
+#else
+  my_rank = 0;
+  n_procs = 1;
+#endif
+
+verbose = (my_rank == 0);
 
   // open up the parameter reader
   std::string param_file = "param.lua";
   if( argc > 1 ) param_file = std::string( argv[ 1 ] );
   params.initialize(param_file,verbose);
 
-  // initialize the frequency grid  
+  // initialize the frequency grid
   std::vector<double> nu_dims = params.getVector<double>("transport_nu_grid");
   if ((nu_dims.size() != 4)&&(nu_dims.size() != 3)) {
-    cout << "# improperly defined nu_grid; need {nu_1, nu_2, dnu, (log?)}; exiting\n";
+    cerr << "# improperly defined nu_grid; need {nu_1, nu_2, dnu, (log?)}; exiting" << endl;
     exit(1); }
   if (nu_dims.size() == 3)
     nu_grid.init(nu_dims[0],nu_dims[1],nu_dims[2]);
@@ -49,49 +65,53 @@ int main(int argc, char **argv)
   //-------------------------------------------------------
   // get the elements to use
   //-------------------------------------------------------
-
-  std::vector<double> elements = params.getVector<double>("elements");
-  std::vector<int> elems_A, elems_Z;
-  for (int i=0;i<elements.size();i++)  
-  {
-    std::string species = std::to_string(elements[i]);
-    int ind1 = species.find(".");
-    int ind2 = species.find("0");
-    std::string el_Z = species.substr(0,ind1);
-    std::string el_A = species.substr(ind1+1,ind2-ind1-1);
-    elems_Z.push_back(std::stoi(el_Z));
-    elems_A.push_back(std::stoi(el_A));
-  }
+  std::vector<int> elems_Z = params.getVector<int>("elements_Z");
+  std::vector<int> elems_A = params.getVector<int>("elements_A");
 
   //-------------------------------------------------------
   // Set up the gas class
   //-------------------------------------------------------
-  std::string atomdata = params.getScalar<string>("data_atomic_file");  
-  gas.initialize(atomdata,elems_Z,elems_A,nu_grid);
-  std::string fuzzfile = params.getScalar<string>("data_fuzzline_file");  
-  gas.read_fuzzfile(fuzzfile);
+  std::string atomdata = params.getScalar<string>("data_atomic_file");
+  std::ifstream afile(atomdata);
+  if (!afile)
+  {
+    if (verbose)
+      std::cerr << "Can't open atom datafile " << atomdata << "; exiting" << std::endl;
+    exit(1);
+  }
+  afile.close();
+  AtomicData* atomic_data = new AtomicData;
+  atomic_data->initialize(atomdata,nu_grid);
+  gas.initialize(atomic_data,elems_Z,elems_A,nu_grid);
+
+  std::string fuzzfile = params.getScalar<string>("data_fuzzline_file");
+  int nl = gas.read_fuzzfile(fuzzfile);
+  std::cout << "# From fuzzfile \"" << fuzzfile << "\" " <<
+     nl << " lines used\n";gas.read_fuzzfile(fuzzfile);
   std::vector<double> massfrac = params.getVector<double>("mass_fractions");
   gas.set_mass_fractions(massfrac);
-  gas.time = params.getScalar<double>("time");
+  gas.time_ = params.getScalar<double>("time");
 
   // opacity parameters
   gas.use_nlte_ = 0;
-  gas.use_electron_scattering_opacity 
+  gas.use_electron_scattering_opacity
     = params.getScalar<int>("opacity_electron_scattering");
-  gas.use_line_expansion_opacity  
+  gas.use_line_expansion_opacity
     = params.getScalar<int>("opacity_line_expansion");
-  gas.use_fuzz_expansion_opacity  
+  gas.use_fuzz_expansion_opacity
     = params.getScalar<int>("opacity_fuzz_expansion");
-  gas.use_bound_free_opacity  
+  gas.use_bound_free_opacity
     = params.getScalar<int>("opacity_bound_free");
-  gas.use_bound_bound_opacity  
+  gas.use_bound_bound_opacity
     = params.getScalar<int>("opacity_bound_bound");
-  gas.use_free_free_opacity  
+  gas.use_free_free_opacity
     = params.getScalar<int>("opacity_free_free");
-  gas.grey_opacity_ = 0;
+  gas.bulk_grey_opacity_ = 0;
+  gas.use_zone_specific_grey_opacity_ = 0;
+  gas.line_velocity_width_ = params.getScalar<double>("line_velocity_width");
 
   // ------------------------------------------
-  // allocate vectors for opacities/emissivities 
+  // allocate vectors for opacities/emissivities
   // ------------------------------------------
   int ng = nu_grid.size();
   abs_opacity.resize(ng);
@@ -99,18 +119,30 @@ int main(int argc, char **argv)
   tot_opacity.resize(ng);
   emissivity.resize(ng);
 
- 
+  if (verbose) gas.print_properties();
+
   // ------------------------------------------
   // Do output requested
   // ------------------------------------------
-  std::string mesafile = params.getScalar<string>("output_mesa_file");  
+  std::string mesafile = params.getScalar<string>("output_mesa_file");
   if (mesafile != "") write_mesa_file(mesafile);
 
-  std::string frequencyfile = params.getScalar<string>("output_frequency_file");  
+  std::string frequencyfile = params.getScalar<string>("output_frequency_file");
   if (frequencyfile != "") write_frequency_file(frequencyfile,0);
 
-  std::string lambdafile = params.getScalar<string>("output_wavelength_file");  
+  std::string lambdafile = params.getScalar<string>("output_wavelength_file");
   if (lambdafile != "") write_frequency_file(lambdafile,1);
+
+  std::string statefile = params.getScalar<string>("output_gas_state");
+  if (statefile != "") write_gas_state(statefile);
+
+  std::string meanfile = params.getScalar<string>("output_mean_opacities");
+  if (meanfile != "") write_mean_opacities(meanfile);
+
+#ifdef MPI_PARALLEL
+  MPI_Finalize();
+#endif
+
 }
 
 
@@ -120,6 +152,12 @@ int main(int argc, char **argv)
 void write_frequency_file(std::string outfile, int style)
 {
   FILE *fout = fopen(outfile.c_str(),"w");
+  if (fout == NULL)
+  {
+    if (verbose) std::cerr << "Can't open opacity output file " << outfile << std::endl;
+    return;
+  }
+
   vector<double> temperature_list = params.getArray<double>("temperature");
   vector<double> density_list     = params.getArray<double>("density");
   vector <double>::iterator dens, temp;
@@ -127,13 +165,13 @@ void write_frequency_file(std::string outfile, int style)
     for (temp=temperature_list.begin();temp != temperature_list.end(); ++ temp )
     {
       double this_dens = pow(10,*dens);
-      gas.temp = *temp;
-      gas.dens = this_dens;
+      gas.temp_ = *temp;
+      gas.dens_ = this_dens;
       gas.solve_state();
       gas.computeOpacity(abs_opacity,scat_opacity,emissivity);
 
       double x;
-      for (int i=0;i<nu_grid.size();i++)
+      for (int i=0;i<nu_grid.size();++i)
       {
         int ind = i;
         if (style == 1) ind = nu_grid.size() - i - 1;
@@ -142,12 +180,99 @@ void write_frequency_file(std::string outfile, int style)
         if (style == 1) x = pc::c/nu_grid[ind]*1e8;
         else x = nu_grid[ind];
         if (temperature_list.size() > 1) fprintf(fout,"%12.5e ",*temp);
-        fprintf(fout,"%12.5e %12.5e\n",x,tot_opacity[ind]);
+        fprintf(fout,"%15.8e %12.5e\n",x,tot_opacity[ind]);
       }
-
     }
-
 }
+
+
+//*********************************************************
+// Write out the gas state
+//*********************************************************
+void write_gas_state(std::string statefile)
+{
+  FILE *fout = fopen(statefile.c_str(),"w");
+  if (fout == NULL)
+  {
+    if (verbose) std::cerr << "Can't open output gas state file " << statefile << std::endl;
+    return;
+  }
+
+  fprintf(fout,"---------------------------------------\n");
+  fprintf(fout,"density (g/cc)          = %12.4e\n",gas.get_density());
+  fprintf(fout,"temperature (K)         = %12.4e\n",gas.get_temperature());
+  fprintf(fout,"mean atomic weight      = %12.4e\n",gas.get_mean_atomic_weight());
+  fprintf(fout,"number density (g/cc)   = %12.4e\n",gas.get_density()/gas.get_mean_atomic_weight()/pc::m_p);
+  fprintf(fout,"electron density (1/cc) = %12.4e\n",gas.get_electron_density());
+  fprintf(fout,"---------------------------------------\n\n");
+
+  for (int i=0;i<gas.get_number_atoms();i++)
+  {
+    fprintf(fout,"--------------------------------------------------\n");
+    fprintf(fout,"element Z.A = %d.%d ; mass_fraction =  %.4e\n",
+        gas.elem_Z[i],gas.elem_A[i],gas.mass_frac[i]);
+    fprintf(fout,"-------------------------------------------------\n");
+    fprintf(fout,"  ion   fraction    partition\n");
+    for (int j=0;j<gas.get_number_ions(i);j++)
+    {
+      fprintf(fout,"%4d %12.4e %12.4e\n",j,gas.get_ionization_fraction(i,j),
+        gas.get_partition_function(i,j));
+    }
+  }
+}
+
+//*********************************************************
+// Write mean opacities
+//*********************************************************
+void write_mean_opacities(std::string outfile)
+{
+  FILE *fout = fopen(outfile.c_str(),"w");
+  if (fout == NULL)
+  {
+    if (verbose) std::cerr << "Can't open mean opacity output file " << outfile << std::endl;
+    return;
+  }
+
+  vector<double> temperature_list = params.getArray<double>("temperature");
+  vector<double> density_list     = params.getArray<double>("density");
+  int use_logR = params.getScalar<int>("use_logR");
+
+  // write header
+  fprintf(fout,"#  temp (K)     rho(g/cc)     ion_x      kappa_p       eps_p        kappa_r      eps_r\n");
+
+  vector <double>::iterator dens, temp;
+  for (dens=density_list.begin();dens != density_list.end(); ++ dens )
+    for (temp=temperature_list.begin();temp != temperature_list.end(); ++ temp )
+    {
+      double this_dens = *dens;
+      if (use_logR) this_dens = pow(10,*dens + 3*log10(*temp) - 18);
+      else this_dens = pow(10,*dens);
+      gas.temp_ = *temp;
+      gas.dens_ = this_dens;
+      std::vector<double> J_nu;
+      gas.solve_state(J_nu);
+      gas.computeOpacity(abs_opacity,scat_opacity,emissivity);
+
+      for (int i=0;i<nu_grid.size();++i)
+        tot_opacity[i] = abs_opacity[i] + scat_opacity[i];
+
+      double kr    = rosseland_mean(tot_opacity);
+      double eps_r = rosseland_mean(abs_opacity)/kr;
+      double kp    = planck_mean(tot_opacity);
+      double eps_p = planck_mean(abs_opacity)/kp;
+      if (kr == 0) eps_r = 0;
+      if (kp == 0) eps_p = 0;
+
+      double ndens = gas.get_density()/gas.get_mean_atomic_weight()/pc::m_p;
+      double x_e = gas.get_electron_density()/ndens;
+      fprintf(fout,"%12.4e %12.4e %12.4e",gas.get_temperature(),gas.get_density(),x_e);
+      fprintf(fout,"%12.4e %12.4e %12.4e %12.4e\n",kp,eps_p,kr,eps_r);
+    }
+  fclose(fout);
+}
+
+
+
 
 //*********************************************************
 // Write an opacity table in mesa format
@@ -172,9 +297,9 @@ void write_mesa_file(std::string mesafile)
   double Z_metals   = 0.02;
   fprintf(mesaout,"1   0   %f   %f ",X_hydrogen,Z_metals);
   fprintf(mesaout,"  %lu  %f  %f ",density_list.size(),density_list.front(),density_list.back());
-  fprintf(mesaout,"  %lu  %f  %f\n",temperature_list.size(),log10(temperature_list.front()),log10(temperature_list.back()));  
+  fprintf(mesaout,"  %lu  %f  %f\n",temperature_list.size(),log10(temperature_list.front()),log10(temperature_list.back()));
   fprintf(mesaout,"logT                       logR = logRho - 3*logT + 18\n");
-  fprintf(mesaout,"1   0   %f   %f   %f ",gas.time/(60*60*24),X_hydrogen,Z_metals);
+  fprintf(mesaout,"1   0   %f   %f   %f ",gas.time_/(60*60*24),X_hydrogen,Z_metals);
 
   vector <double>::iterator dens, temp;
   for (dens=density_list.begin();dens != density_list.end(); ++ dens )
@@ -192,13 +317,13 @@ void write_mesa_file(std::string mesafile)
       else
         this_dens = pow(10,*dens);
 
-      gas.temp = *temp;
-      gas.dens = this_dens;
+      gas.temp_ = *temp;
+      gas.dens_ = this_dens;
       std::vector<double> J_nu;
       gas.solve_state(J_nu);
       gas.computeOpacity(abs_opacity,scat_opacity,emissivity);
 
-      for (int i=0;i<nu_grid.size();i++)
+      for (int i=0;i<nu_grid.size();++i)
       {
         tot_opacity[i] = abs_opacity[i] + scat_opacity[i];
       }
@@ -209,24 +334,26 @@ void write_mesa_file(std::string mesafile)
 
       if (write_planck_mean) fprintf(mesaout,"%f ",log10(kp));
       else fprintf(mesaout,"%f ",log10(kr));
-      
+
     }
     fprintf(mesaout,"\n");
   }
   fclose(mesaout);
 }
 
-
-double rosseland_mean(std::vector<double> opac)
+//*********************************************************
+// Calculate a rosseland mean opacity
+//*********************************************************
+double rosseland_mean(std::vector<OpacityType> opac)
 {
   // calculate rosseland opacity
   double norm = 0;
   double sum  = 0;
-  for (int i = 1;i < nu_grid.size(); i++)
+  for (int i = 1;i < nu_grid.size(); ++i)
   {
     double dnu = nu_grid[i] - nu_grid[i-1];
     double nu0 = 0.5*(nu_grid[i] + nu_grid[i-1]);
-    double zeta = pc::h*nu0/pc::k/gas.temp;
+    double zeta = pc::h*nu0/pc::k/gas.get_temperature();
     double ezeta = exp(zeta);
     double dBdT  = pow(nu0,4);
     dBdT *= ezeta/(ezeta - 1)/(ezeta-1);
@@ -235,32 +362,29 @@ double rosseland_mean(std::vector<double> opac)
     sum  += dBdT/(opac[i])*dnu;
   //  std::cout <<  nu0 << " " << opac[i] << " " << dBdT << "\n";
   }
-  double kappa_R = norm/sum/gas.dens;
+  double kappa_R = norm/sum/gas.get_density();
   return kappa_R;
 }
 
-
-double planck_mean(std::vector<double> opac)
+//*********************************************************
+// Calculate a planck mean opacity
+//*********************************************************
+double planck_mean(std::vector<OpacityType> opac)
 {
   // calculate planck mean opacity
   double norm = 0;
   double sum  = 0;
-  for (int i = 1;i < nu_grid.size(); i++)
+  for (int i = 1;i < nu_grid.size(); ++i)
   {
     double dnu = nu_grid[i] - nu_grid[i-1];
     double nu0 = 0.5*(nu_grid[i] + nu_grid[i-1]);
-    double zeta = pc::h*nu0/pc::k/gas.temp;
+    double zeta = pc::h*nu0/pc::k/gas.get_temperature();
     double Bnu  = pow(nu0,3)/(exp(zeta) - 1);
     if (isnan(Bnu))Bnu = 0;
     norm += Bnu*dnu;
     sum  += Bnu*opac[i]*dnu;
   }
-  double kappa_P = sum/norm/gas.dens;
+  double kappa_P = sum/norm/gas.get_density();
   return kappa_P;
 }
 
-
-
-
-
-  

@@ -13,6 +13,8 @@ class spectrum_array {
  
 private:
 
+  // MPI
+  int nproc, my_rank;
   // spectrum name
   char name[1000];
 
@@ -25,7 +27,9 @@ private:
 
   // counting arrays
   std::vector<double> flux;
-  std::vector<int>    click;
+  // This is the average number of clicks per rank. The quantity output in 
+  // the print method is the total number of clicks over all ranks.
+  std::vector<double>    click;
 
   // Indexing
   int n_elements;
@@ -40,7 +44,7 @@ public:
   // Initialize
   void init(std::vector<double>,std::vector<double>,int,int,double,int);
   void set_name(std::string);
-
+  
   // Count a packets
   void count(double t, double w, double E, double *D, double vp);
 
@@ -52,7 +56,12 @@ public:
   void MPI_average();
 
   // Print out
-  void print();
+  void print(int);
+
+  void writeCheckpointSpectrum(std::string fname, std::string spectrum_name);
+  void readCheckpointSpectrum(std::string fname, std::string n);
+
+  bool is_equal(spectrum_array sa, bool complain);
 };
 
 #endif

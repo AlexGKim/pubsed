@@ -17,19 +17,21 @@ private:
 
   // store location of the outer edge of the zone.
   locate_array r_out;
+  locate_array r_out_new; // for restart debugging
   // velocity at inner boundary
-  double v_inner_; 
+  double v_inner_;
+  double v_inner_new;
 
   // store volumes explicitly
   std::vector<double> vol;
-  
-  // functions for reading in files
-  void read_SNR_file(std::ifstream &, int, int, double);
+  std::vector<double> vol_new;
+
+  // functions for reading in model files
+  void read_ascii_file(std::string, ParameterReader*, int);
+  void read_hdf5_file(std::string, ParameterReader*, int);
 
 
 public:
-
-  virtual ~grid_1D_sphere() {}
 
   void read_model_file(ParameterReader*);
 
@@ -44,13 +46,32 @@ public:
   double  zone_volume(const int)   const;
   void    sample_in_zone(int, std::vector<double>, double[3]);
   void    get_velocity(int i, double[3], double[3], double[3], double*);
-  void    write_out(int,double);
+  void    write_plotfile(int,double,int);
   void    expand(double);
 
   int get_next_zone(const double *x, const double *D, int, double, double *dist) const;
 
-  void    coordinates(int i,double r[3]) {
+  void  coordinates(int i,double r[3]) {
     r[0] = r_out[i]; r[1] = 0; r[2] = 0;}
+
+  void writeCheckpointGrid(std::string fname);
+  void readCheckpointGrid(std::string fname, bool test=false);
+  void testCheckpointGrid(std::string fname);
+
+  void restartGrid(ParameterReader* params);
+
+  //****** function overides
+
+  virtual void get_zone_size(int i, double *delta)
+  {
+    *delta = r_out.delta(i);
+  }
+
+
+  virtual void get_r_out_min(double *rmin)
+  {
+    *rmin = r_out.minval();
+  }
 
 };
 
