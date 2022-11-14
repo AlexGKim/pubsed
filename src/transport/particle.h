@@ -1,7 +1,7 @@
 #ifndef _PARTICLE_H
 #define _PARTICLE_H
 
-#include <math.h>
+#include <cmath>
 #include <stdio.h>
 
 // particle properties

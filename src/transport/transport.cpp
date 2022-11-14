@@ -480,22 +480,6 @@ ParticleFate transport::propagate_monte_carlo(particle &p, double tstop)
     }
    }
 
-  // Add escaped photons to output spectrum
-  if (fate == escaped) 
-  {
-    // account for light crossing time, relative to grid center
-    double xdot = p.x[0]*p.D[0] + p.x[1]*p.D[1] + p.x[2]*p.D[2];
-    double t_obs = p.t - xdot/pc::c;
-
-    // compute Vp
-    
-    double v = sqrt(p.x[0]*p.x[0] + p.x[1]*p.x[1] + p.x[2]*p.x[2]) / p.t;
-    double vp = sqrt((v * v) - (xdot / p.t) * (xdot / p.t));
-
-    if (p.type == photon)   optical_spectrum.count(t_obs,p.nu,p.e,p.D,vp);
-    if (p.type == gammaray) gamma_spectrum.count(t_obs,p.nu,p.e,p.D,vp);
-  }
-
   return fate;
 }
 

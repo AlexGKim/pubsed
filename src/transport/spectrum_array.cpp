@@ -281,12 +281,13 @@ void spectrum_array::print(int suppress_txt = 0)
   double *click_buffer = new double[n_elements];
 
   // unitize
+  for (int l=0;l<n_v;l++)
   for (int k=0;k<n_mu;k++)
     for (int m=0;m<n_phi;m++)
       for (int i=0;i<n_times;i++)
         for (int j=0;j<n_wave;j++)
         {
-          int id = index(i,j,k,m);
+          int id = index(i,j,k,m,l);
 
           double norm = 1.0/(n_mu*n_phi);
           if (n_wave > 1)  norm *= wave_grid.delta(j);
@@ -394,7 +395,7 @@ void spectrum_array::print(int suppress_txt = 0)
 
     // write v grid
   tmp_array = new float[n_v];
-  hsize_t dims_v[RANK] = {n_v};
+  hsize_t dims_v[RANK] = {(hsize_t)n_v};
   for (int j=0;j<n_v;j++) tmp_array[j] = v_grid.center(j);
   H5LTmake_dataset(file_id,"v",RANK,dims_v,H5T_NATIVE_FLOAT,tmp_array);
   delete[] tmp_array;

@@ -2,7 +2,7 @@
 #define _LOCATE_ARRAY_H
 
 #include <vector>
-#include <math.h>
+#include <cmath>
 #include <hdf5.h>
 #include <limits>
 #include <iostream>
