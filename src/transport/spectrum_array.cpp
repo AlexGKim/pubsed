@@ -106,8 +106,12 @@ void spectrum_array::writeCheckpointSpectrum(std::string fname, std::string spec
     mu_grid.writeCheckpoint(fname, spectrum_name, "mu_grid");
     phi_grid.writeCheckpoint(fname, spectrum_name, "phi_grid");
 
+    // new Alex
+    v_grid.writeCheckpoint(fname, spectrum_name, "v_grid");
+
     writeVector(fname, spectrum_name, "flux", flux, H5T_NATIVE_DOUBLE);
     writeVector(fname, spectrum_name, "click", click, H5T_NATIVE_DOUBLE);
+
 
     hsize_t single_val = 1;
     hsize_t name_len = 1000;
