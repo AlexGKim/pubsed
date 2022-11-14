@@ -253,6 +253,7 @@ void spectrum_array::count(double t, double w, double E, double *D, double vp)
   if (t_bin >= time_grid.size()) return;
   if (m_bin >= mu_grid.size())   return;
   if (p_bin >= phi_grid.size())  return;
+  if (v_bin >= v_grid.size())  return;
 
   // add to counters
   int ind      = index(t_bin,l_bin,m_bin,p_bin,v_bin);
