@@ -2,9 +2,10 @@ grid_type    = "grid_1D_sphere"    -- grid geometry; must match input model
 model_file   = "w7.mod"   -- input model file
 hydro_module = "homologous"
 
-defaults_file      = "../defaults.lua"
-data_atomic_file   = "../../data/ASD_atomdata.hdf5"
-data_fuzzline_file = "../../data/kurucz_cd23_fuzz.hdf5"
+sedona_home        = os.getenv('SEDONA_HOME')
+defaults_file      = sedona_home.."/defaults/sedona_defaults.lua"
+data_atomic_file   = sedona_home.."/data/ASD_atomdata.hdf5"
+data_fuzzline_file = sedona_home.."/data/kurucz_cd23_fuzz.hdf5"
 
 -- helper variable
 days = 3600.0*24
