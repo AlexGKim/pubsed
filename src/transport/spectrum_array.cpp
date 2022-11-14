@@ -69,12 +69,7 @@ void spectrum_array::init(std::vector<double> t, std::vector<double> w,
   this->phi_grid.init(0,2*pc::pi,n_phi);
 
   // assign v grid
-  
-  std::cout << "initializing v grid" << std::endl;
-  std::cout << "v_max is " << v_max << std::endl;
-  std::cout << "nv is " << nv << std::endl;
   this->v_grid.init(0,v_max,nv);
-  std::cout << "v grid initialized" << std::endl;
 
   // index parameters
   this->n_elements  = n_times*n_wave*n_mu*n_phi*nv;
