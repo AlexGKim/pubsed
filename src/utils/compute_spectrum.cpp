@@ -110,7 +110,10 @@ int main(int argc, char **argv){
             mu_filt_flag * nu_filt_flag * vel_filt_flag;
 
         if (filt_flag) {
-          spectrum.count(i_part->t, i_part->nu, i_part->e, i_part->D);
+          double v = sqrt(i_part->x[0]*i_part->x[0] + i_part->x[1]*i_part->x[1] + i_part->x[2]*i_part->x[2]) / i_part->t;
+          double vp = sqrt((v * v) - (i_part->x_dot_d() / i_part->t) * (i_part->x_dot_d() / i_part->t));
+
+          spectrum.count(i_part->t, i_part->nu, i_part->e, i_part->D, vp);
           if (save_particles)
             saved_particles.push_back(*i_part);
         } 
