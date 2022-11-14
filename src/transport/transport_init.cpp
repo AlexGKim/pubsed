@@ -171,7 +171,7 @@ void transport::init(ParameterReader* par, grid_general *g)
     int nv   = params_->getScalar<int>("spectrum_n_v");
     double v_max = params_->getScalar<double>("spectrum_v_max");
 
-    optical_spectrum.init(stg,sng,nmu,nphi);
+    optical_spectrum.init(stg,sng,nmu,nphi,v_max, nv);
     std::vector<double>gng = params_->getVector<double>("gamma_nu_grid");
     gamma_spectrum.init(stg,sng,nmu,nphi,v_max,nv);
   }

@@ -65,10 +65,16 @@ void transport::step(double dt)
     {
       // account for light crossing time, relative to grid center
       double t_obs = particles[i].t - particles[i].x_dot_d()/pc::c;
+
+    // compute Vp
+    
+    double v = sqrt(particles[i].x[0]*particles[i].x[0] + particles[i].x[1]*particles[i].x[1] + particles[i].x[2]*particles[i].x[2]) / particles[i].t;
+    double vp = sqrt((v * v) - (particles[i].x_dot_d() / particles[i].t) * (particles[i].x_dot_d() / particles[i].t));
+
       if (particles[i].type == photon)
-        optical_spectrum.count(t_obs,particles[i].nu,particles[i].e,particles[i].D);
+        optical_spectrum.count(t_obs,particles[i].nu,particles[i].e,particles[i].D, vp);
       if (particles[i].type == gammaray)
-        gamma_spectrum.count(t_obs,particles[i].nu,particles[i].e,particles[i].D);
+        gamma_spectrum.count(t_obs,particles[i].nu,particles[i].e,particles[i].D, vp);
       particles[i].t = t_obs;
       if (save_escaped_particles_) {
 #pragma omp critical
