@@ -4,7 +4,6 @@
 .PHONY: all clean realclean gomc snopac spectrum chk la_test
 
 SEDONA_GIT_VERSION := $(shell cd $(SEDONA_HOME); git describe --abbrev=12 --dirty --always --tags)
-COMPILE_DATETIME := $(shell date --iso=seconds)
 DEFINES += -DSEDONA_GIT_VERSION=\"$(SEDONA_GIT_VERSION)\" -DCOMPILE_DATETIME=\"$(COMPILE_DATETIME)\"
 CXXFLAGS += $(DEFINES)
 
@@ -13,8 +12,9 @@ GSL_INC=$(GSL_DIR)/include
 GSL_LIB=$(GSL_DIR)/lib
 
 # location of lua
-LUA_INC=$(LUA_DIR)/src
-LUA_LIB=$(LUA_DIR)/src
+LUA_DIR=/opt/homebrew/
+LUA_INC=$(LUA_DIR)/include/lua
+LUA_LIB=$(LUA_DIR)/lib
 
 # location of hdf5
 HDF_INC=$(HDF5_DIR)/include
