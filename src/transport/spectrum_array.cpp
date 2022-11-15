@@ -400,6 +400,12 @@ void spectrum_array::print(int suppress_txt = 0)
   H5LTmake_dataset(file_id,"v",RANK,dims_v,H5T_NATIVE_FLOAT,tmp_array);
   delete[] tmp_array;
 
+  tmp_array = new float[n_v+1];
+  hsize_t  dims_v_edges[RANK]={(hsize_t)(n_v+1)};
+  tmp_array[0] = v_grid.minval();
+  for (int j=0;j<n_v;j++) tmp_array[j+1] = v_grid[j];
+  H5LTmake_dataset(file_id,"v_edges",RANK,dims_v_edges,H5T_NATIVE_FLOAT,tmp_array);
+  delete[] tmp_array;
 
 
   // write fluxes and counts arrays
@@ -407,6 +413,13 @@ void spectrum_array::print(int suppress_txt = 0)
   {
     const int RANKF = 2;
     hsize_t  dims_flux[RANKF]={(hsize_t)n_t,(hsize_t)n_nu};
+    H5LTmake_dataset(file_id,"Lnu",RANKF,dims_flux,H5T_NATIVE_DOUBLE,darray);
+    H5LTmake_dataset(file_id,"click",RANKF,dims_flux,H5T_NATIVE_DOUBLE,click_buffer);
+  }
+  if ( (n_mu == 1) && (n_phi == 1)  && (n_v != 1))
+  {
+    const int RANKF = 3;
+    hsize_t  dims_flux[RANKF]={(hsize_t)n_t,(hsize_t)n_nu,(hsize_t)n_v};
     H5LTmake_dataset(file_id,"Lnu",RANKF,dims_flux,H5T_NATIVE_DOUBLE,darray);
     H5LTmake_dataset(file_id,"click",RANKF,dims_flux,H5T_NATIVE_DOUBLE,click_buffer);
   }
@@ -431,13 +444,13 @@ void spectrum_array::print(int suppress_txt = 0)
     H5LTmake_dataset(file_id,"Lnu",RANKF,dims_flux,H5T_NATIVE_DOUBLE,darray);
     H5LTmake_dataset(file_id,"click",RANKF,dims_flux,H5T_NATIVE_DOUBLE,click_buffer);
   }
-else{
-  // write fluxes array
-    const int RANKF = 5;
-    hsize_t  dims_flux[RANKF]={(hsize_t)n_t,(hsize_t)n_nu,(hsize_t)n_mu,(hsize_t)n_phi,(hsize_t)n_v};
-    H5LTmake_dataset(file_id,"Lnu",RANKF,dims_flux,H5T_NATIVE_DOUBLE,darray);
-    H5LTmake_dataset(file_id,"click",RANKF,dims_flux,H5T_NATIVE_DOUBLE,click_buffer);
-} 
+  else{
+    // write fluxes array
+      const int RANKF = 5;
+      hsize_t  dims_flux[RANKF]={(hsize_t)n_t,(hsize_t)n_nu,(hsize_t)n_mu,(hsize_t)n_phi,(hsize_t)n_v};
+      H5LTmake_dataset(file_id,"Lnu",RANKF,dims_flux,H5T_NATIVE_DOUBLE,darray);
+      H5LTmake_dataset(file_id,"click",RANKF,dims_flux,H5T_NATIVE_DOUBLE,click_buffer);
+  } 
 
   delete[] darray;
   delete[] click_buffer;
